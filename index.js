@@ -7,24 +7,35 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ Middleware (Fixing CORS & JSON parsing)
+// ✅ Middleware (CORS & JSON parsing)
+app.use(express.json()); // JSON parsing middleware
+
+// ✅ Allow CORS (Fixed)
 const corsOptions = {
-  origin: "http://localhost:5173", // ✅ Allow frontend origin
-  credentials: true, // ✅ Allow sending cookies & authorization headers
+  origin: ["https://assignment-11--job-task.web.app", "http://localhost:5173"], // Allow specific origins
+  methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
+  credentials: true, // Allow cookies & authorization headers
 };
-
 app.use(cors(corsOptions));
-app.use(express.json());
+app.options("*", cors(corsOptions)); // Preflight requests handling
 
-// ✅ Root API
-app.get("/", (req, res) => {
-  res.send("Job Task API is Running");
-});
 
-// ✅ Start Server
-app.listen(PORT, () => {
-  console.log(`Server is running on port: ${PORT}`);
-});
+
+app.use(cors({
+  origin:['http://localhost:5173','https://assignment-11--job-task.web.app'],
+  credentials:true
+}))
+ 
+app.use(express.json())
+  // ✅ Root API
+  app.get("/", (req, res) => {
+    res.send("🚀 Job Task API is Running");
+  });
+
+
+
+
+
 
 // ✅ MongoDB Connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.9e2ji.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -39,8 +50,8 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
-    console.log("Connected to MongoDB");
+    // await client.connect();
+    // console.log("✅ Connected to MongoDB");
 
     const usersCollection = client.db("JobTasksDB").collection("users");
     const allTasksCollection = client.db("JobTasksDB").collection("allTasks");
@@ -60,6 +71,8 @@ async function run() {
         next();
       });
     };
+
+  
 
     // ✅ Generate JWT Token
     app.post("/jwt", (req, res) => {
@@ -120,24 +133,13 @@ async function run() {
       res.send(tasks);
     });
 
-    // // ✅ Get User's Tasks by Email & Category
-    // app.get("/allTasks/:email", async (req, res) => {
-    //   const { category, email } = req.params;
-    //   const tasks = await allTasksCollection.find({ email, category }).toArray();
-    //   res.send(tasks);
-    // });
-
-    // ✅ Get Tasks by Category
- // Get tasks by email
- app.get("/allTasks/:email",async (req, res) => {
-  const email = req.params.email; 
-  console.log({email});
-  const query={email:email}
-    const result = await allTasksCollection.find( query ).toArray();
-    res.send(result);
-    // console.log(result);
-  
-});
+    // ✅ Get tasks by email
+    app.get("/allTasks/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await allTasksCollection.find(query).toArray();
+      res.send(result);
+    });
 
     // ✅ Add New Task
     app.post("/allTasks", async (req, res) => {
@@ -147,16 +149,33 @@ async function run() {
     });
 
     // ✅ Update Task (Drag & Drop)
-    app.put("/allTasks/:id", async (req, res) => {
-      const { id } = req.params;
-      const updatedTask = req.body;
-      delete updatedTask._id;
+    app.put("/allTasks/:taskId", async (req, res) => {
+      try {
+        const { taskId } = req.params;
+        const updatedTask = req.body;
 
-      const result = await allTasksCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updatedTask }
-      );
-      res.send(result);
+        // Ensure _id is not included in update
+        delete updatedTask._id;
+
+        if (!ObjectId.isValid(taskId)) {
+          return res.status(400).send({ message: "Invalid taskId" });
+        }
+
+        const taskObjectId = new ObjectId(taskId);
+        const result = await allTasksCollection.updateOne(
+          { _id: taskObjectId },
+          { $set: updatedTask }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).send({ message: "Task not found or no changes made" });
+        }
+
+        res.send({ success: true, message: "Task updated successfully", result });
+      } catch (error) {
+        console.error("Task update error:", error);
+        res.status(500).send({ success: false, message: "Failed to update task" });
+      }
     });
 
     // ✅ Update Task by ID (Edit Task)
@@ -191,8 +210,13 @@ async function run() {
       res.send(result);
     });
 
+    // ✅ Start Server
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on port: ${PORT}`);
+    });
+
   } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
+    console.error("❌ Error connecting to MongoDB:", error);
   }
 }
 
